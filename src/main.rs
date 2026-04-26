@@ -1,12 +1,21 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
+use clap::Parser;
 use gimli::{
     AttributeValue, DebuggingInformationEntry, Dwarf, EndianSlice, Reader, RunTimeEndian, Unit,
 };
 use object::{Object, ObjectSection};
-use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+
+#[derive(Debug, Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    #[arg(short, long)]
+    linkage_name: bool,
+
+    file_name: String,
+}
 
 struct FunctionStats {
     name: String,
@@ -16,13 +25,9 @@ struct FunctionStats {
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <elf-file>", args[0]);
-        std::process::exit(1);
-    }
+    let args = Cli::parse();
 
-    let path = Path::new(&args[1]);
+    let path = Path::new(&args.file_name);
     let file = File::open(path).with_context(|| format!("Failed to open file: {:?}", path))?;
     let mmap = unsafe { memmap2::Mmap::map(&file)? };
     let object = object::File::parse(&*mmap)?;
@@ -61,7 +66,7 @@ fn main() -> Result<()> {
             .map_err(|e| anyhow!("DWARF error: {}", e))?
         {
             if entry.tag() == gimli::DW_TAG_subprogram {
-                if let Some(stats) = analyze_function(&dwarf, &comp_unit, entry)? {
+                if let Some(stats) = analyze_function(&dwarf, &comp_unit, entry, &args)? {
                     if let Err(_) = writeln!(
                         stdout,
                         "{:>10} {:>10} {:>8}   {}",
@@ -81,9 +86,10 @@ fn analyze_function<R: Reader>(
     dwarf: &Dwarf<R>,
     unit: &Unit<R>,
     entry: &DebuggingInformationEntry<R>,
+    args: &Cli,
 ) -> Result<Option<FunctionStats>> {
     // Get function name
-    let name = resolve_name(dwarf, unit, entry)?;
+    let name = resolve_name(dwarf, unit, entry, args)?;
 
     let total_size = get_entry_size(dwarf, unit, entry)?;
     if total_size == 0 {
@@ -115,8 +121,11 @@ fn resolve_name<R: Reader>(
     dwarf: &Dwarf<R>,
     unit: &Unit<R>,
     entry: &DebuggingInformationEntry<R>,
+    args: &Cli,
 ) -> Result<String> {
-    let name = if let Some(name_attr) = entry.attr_value(gimli::DW_AT_linkage_name) {
+    let name = if let Some(name_attr) = entry.attr_value(gimli::DW_AT_linkage_name)
+        && args.linkage_name
+    {
         dwarf
             .attr_string(unit, name_attr)
             .map_err(|e| anyhow!("{}", e))?
