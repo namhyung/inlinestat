@@ -1,0 +1,10 @@
+[package]
+name = "inlinestat"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+gimli = "0.33.0"
+memmap2 = "0.9.10"
+object = "0.39.1"
