@@ -116,7 +116,14 @@ fn resolve_name<R: Reader>(
     unit: &Unit<R>,
     entry: &DebuggingInformationEntry<R>,
 ) -> Result<String> {
-    let name = if let Some(name_attr) = entry.attr_value(gimli::DW_AT_name) {
+    let name = if let Some(name_attr) = entry.attr_value(gimli::DW_AT_linkage_name) {
+        dwarf
+            .attr_string(unit, name_attr)
+            .map_err(|e| anyhow!("{}", e))?
+            .to_string_lossy()
+            .map_err(|e| anyhow!("{}", e))?
+            .into_owned()
+    } else if let Some(name_attr) = entry.attr_value(gimli::DW_AT_name) {
         dwarf
             .attr_string(unit, name_attr)
             .map_err(|e| anyhow!("{}", e))?
