@@ -5,6 +5,7 @@ use gimli::{
 use object::{Object, ObjectSection};
 use std::env;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 
 struct FunctionStats {
@@ -43,10 +44,14 @@ fn main() -> Result<()> {
     let dwarf = Dwarf::load(&load_section)?;
     let mut units = dwarf.units();
 
-    println!(
+    let mut stdout = std::io::stdout();
+    if let Err(_) = writeln!(
+        stdout,
         "{:>10} {:>10} {:>8}   {}",
         "# Total Sz", "Self Sz", "Inlines", "Function Name"
-    );
+    ) {
+        return Ok(());
+    }
 
     while let Some(header) = units.next()? {
         let comp_unit = dwarf.unit(header)?;
@@ -57,10 +62,13 @@ fn main() -> Result<()> {
         {
             if entry.tag() == gimli::DW_TAG_subprogram {
                 if let Some(stats) = analyze_function(&dwarf, &comp_unit, entry)? {
-                    println!(
+                    if let Err(_) = writeln!(
+                        stdout,
                         "{:>10} {:>10} {:>8}   {}",
                         stats.total_size, stats.self_size, stats.inlined_count, stats.name
-                    );
+                    ) {
+                        break;
+                    }
                 }
             }
         }
